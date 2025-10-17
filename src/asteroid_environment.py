@@ -5,10 +5,19 @@ class Enemy:
     def __init__(self, power):
         self.power = power
 
+
 class AsteroidEnvironment:
     """Square asteroid maze with start, goal, enemies, and obstacles."""
     def __init__(self, size=7, asteroid_ratio=0.25, enemy_ratio=0.1, seed=None):
-        self.rows, self.cols = size
+        # ✅ Fix: handle both int and (rows, cols)
+        if isinstance(size, int):
+            self.rows = size
+            self.cols = size
+        elif isinstance(size, (tuple, list)) and len(size) == 2:
+            self.rows, self.cols = size
+        else:
+            raise ValueError("size must be an int or a tuple (rows, cols)")
+
         self.asteroid_ratio = asteroid_ratio
         self.enemy_ratio = enemy_ratio
         self.seed = seed

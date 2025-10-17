@@ -1,105 +1,82 @@
 import streamlit as st
+from pyvis.network import Network
 import numpy as np
-import pandas as pd
 from src.asteroid_environment import AsteroidEnvironment
-from src.asteroidProblemSolvingAgentSMART import AsteroidProblemSolvingAgentSMART
-from src.PS_agentPrograms import BestFirstSearchAgentProgram, IDSearchAgentProgram
-from src.environmentClass import Environment
 
-st.set_page_config(page_title="Asteroid Navigation Agents", page_icon="🪐", layout="wide")
+st.set_page_config(page_title="Asteroid Search Visualization", layout="wide")
 
-st.title("🪐 Asteroid Navigation Simulator")
-st.markdown("### Compare UCS and IDS Path-Finding Agents in a Random Environment")
+st.title("🪐 Asteroid Environment Visualizer (PyVis)")
 
-# --- Generate Environment ---
-grid_size = st.slider("Grid Size", 5, 10, 7)
-if st.button("🎲 Generate New Environment"):
-    st.session_state.env = AsteroidEnvironment(size=grid_size)
-    st.session_state.generated = True
+# --- Sidebar Controls ---
+st.sidebar.header("Environment Settings")
+grid_size = st.sidebar.slider("Grid Size", 5, 15, 7)
+asteroid_ratio = st.sidebar.slider("Asteroid Density", 0.0, 0.5, 0.25)
+enemy_ratio = st.sidebar.slider("Enemy Density", 0.0, 0.3, 0.1)
+seed = st.sidebar.number_input("Random Seed (optional)", value=0, step=1)
 
-if "generated" not in st.session_state or not st.session_state.generated:
-    st.warning("Click the button above to generate an asteroid field.")
-    st.stop()
-
-env = st.session_state.env
-
-st.subheader("🌍 Generated Environment")
-st.write(pd.DataFrame(env.grid))
-st.write(f"🚩 **Start:** {env.start} | 🎯 **Goal:** {env.goal}")
-
-# --- Run UCS ---
-if st.button("🚀 Run UCS Agent"):
-    UCS_program = BestFirstSearchAgentProgram()
-    agent_ucs = AsteroidProblemSolvingAgentSMART(
-        initial_state=env.start,
-        environment=env,
-        goal=env.goal,
-        program=UCS_program
+# Generate Environment
+if st.sidebar.button("Generate Environment"):
+    st.session_state.env = AsteroidEnvironment(
+        size=grid_size,
+        asteroid_ratio=asteroid_ratio,
+        enemy_ratio=enemy_ratio,
+        seed=seed if seed != 0 else None
     )
 
-    environment = Environment()
-    environment.add_thing(agent_ucs)
+# Display environment
+if "env" in st.session_state:
+    env = st.session_state.env
+    st.subheader("Generated Grid Matrix")
+    st.write(env.grid)
 
-    step = 0
-    max_steps = 100
-    path = []
+    # --- Build PyVis Graph ---
+    net = Network(height="600px", width="100%", bgcolor="#222222", font_color="white")
+    net.barnes_hut(gravity=-80000, central_gravity=0.3, spring_length=75)
 
-    while agent_ucs.alive and step < max_steps:
-        step += 1
-        environment.step()
-        path.append(agent_ucs.location)
-        if agent_ucs.location == env.goal:
-            break
+    rows, cols = env.grid.shape
 
-    st.session_state.ucs_path = path
-    st.session_state.ucs_steps = step
-    st.session_state.ucs_reached = (agent_ucs.location == env.goal)
-    st.success(f"✅ UCS reached goal in {step} steps!")
+    for r in range(rows):
+        for c in range(cols):
+            node_id = f"{r},{c}"
+            cell = env.grid[r, c]
 
-# --- Run IDS ---
-if st.button("🛰 Run IDS Agent"):
-    IDS_program = IDSearchAgentProgram()
-    agent_ids = AsteroidProblemSolvingAgentSMART(
-        initial_state=env.start,
-        environment=env,
-        goal=env.goal,
-        program=IDS_program
-    )
+            if cell == 1:  # asteroid
+                color = "gray"
+                label = "🪨"
+            elif cell == 2:  # enemy
+                color = "red"
+                label = f"👾 ({env.enemies[(r,c)].power})"
+            elif cell == 3:  # goal
+                color = "green"
+                label = "🏁 Goal"
+            elif cell == 4:  # start
+                color = "blue"
+                label = "🚀 Start"
+            else:
+                color = "white"
+                label = ""
 
-    environment = Environment()
-    environment.add_thing(agent_ids)
+            net.add_node(
+                node_id,
+                label=label,
+                title=f"({r}, {c})",
+                color=color,
+                size=20
+            )
 
-    step = 0
-    max_steps = 100
-    path = []
+    # --- Connect adjacent (non-asteroid) cells ---
+    for r in range(rows):
+        for c in range(cols):
+            if env.grid[r, c] == 1:
+                continue
+            for dr, dc in [(-1,0),(1,0),(0,-1),(0,1)]:
+                nr, nc = r+dr, c+dc
+                if 0 <= nr < rows and 0 <= nc < cols and env.grid[nr, nc] != 1:
+                    net.add_edge(f"{r},{c}", f"{nr},{nc}", color="#555555")
 
-    while agent_ids.alive and step < max_steps:
-        step += 1
-        environment.step()
-        path.append(agent_ids.location)
-        if agent_ids.location == env.goal:
-            break
+    # --- Render PyVis HTML in Streamlit ---
+    net.save_graph("graph.html")
+    st.components.v1.html(open("graph.html", "r", encoding="utf-8").read(), height=620)
 
-    st.session_state.ids_path = path
-    st.session_state.ids_steps = step
-    st.session_state.ids_reached = (agent_ids.location == env.goal)
-    st.success(f"✅ IDS reached goal in {step} steps!")
-
-# --- Display Results ---
-if "ucs_path" in st.session_state or "ids_path" in st.session_state:
-    st.subheader("📊 Results Comparison")
-
-    col1, col2 = st.columns(2)
-    if "ucs_path" in st.session_state:
-        with col1:
-            st.markdown("#### 🚀 UCS Agent Path")
-            st.write(st.session_state.ucs_path)
-            st.metric("Steps", st.session_state.ucs_steps)
-            st.metric("Reached Goal", "✅ Yes" if st.session_state.ucs_reached else "❌ No")
-
-    if "ids_path" in st.session_state:
-        with col2:
-            st.markdown("#### 🛰 IDS Agent Path")
-            st.write(st.session_state.ids_path)
-            st.metric("Steps", st.session_state.ids_steps)
-            st.metric("Reached Goal", "✅ Yes" if st.session_state.ids_reached else "❌ No")
+else:
+    st.info("👈 Adjust settings in the sidebar and click **Generate Environment** to visualize.")
