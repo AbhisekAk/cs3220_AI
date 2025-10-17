@@ -1,69 +1,56 @@
+from src.nodeClass import Node
+import heapq
 
-from src.asteroid_environment import AsteroidEnvironment
-from src.asteroid_problem import AsteroidMazeProblem
-from src.satellite_agent import SatelliteAgent
-from src.PS_agentPrograms import BestFirstSearchAgentProgram, IDSearchAgentProgram
-import matplotlib.pyplot as plt
+# ✅ Uniform Cost Search (UCS)
+def uniform_cost_search(problem):
+    frontier = []
+    start_node = Node(problem.initial)
+    heapq.heappush(frontier, (0, start_node))
+    explored = {}
+
+    while frontier:
+        cost, node = heapq.heappop(frontier)
+
+        # Skip if already explored cheaper
+        if node.state in explored and explored[node.state] <= cost:
+            continue
+
+        explored[node.state] = cost
+
+        # ✅ Goal check
+        if problem.goal_test(node.state):
+            node.path_cost = cost
+            return node  # ✅ Return goal node
+
+        # Expand children
+        for action in problem.actions(node.state):
+            child_state = problem.result(node.state, action)
+            new_cost = problem.path_cost(node.path_cost, node.state, action, child_state)
+            child_node = Node(child_state, node, action, new_cost)
+            heapq.heappush(frontier, (new_cost, child_node))
+
+    return None  # No solution
 
 
+# ✅ Iterative Deepening Search (IDS)
+def iterative_deepening_search(problem):
+    def depth_limited_search(node, limit):
+        if problem.goal_test(node.state):
+            return node
+        elif limit == 0:
+            return None
+        else:
+            for action in problem.actions(node.state):
+                child_state = problem.result(node.state, action)
+                child = Node(child_state, node, action)
+                result = depth_limited_search(child, limit - 1)
+                if result is not None:
+                    return result
+        return None
 
-
-def simulate(agent, env, path):
-    """Move agent through environment, handling enemies."""
-    for step in path[1:]:
-        agent.move(step)
-        if step in env.enemies:
-            enemy = env.enemies[step]
-            alive = agent.encounter_enemy(enemy)
-            if not alive:
-                print(f"Agent destroyed by enemy (power={enemy.power}) at {step}")
-                break
-
-
-def main():
-    env = AsteroidEnvironment()
-    problem = AsteroidMazeProblem(env)
-
-    total_nodes = env.rows * env.cols
-    initial_performance = int(0.5 * total_nodes)
-
-    # Agents
-    agent_ucs = SatelliteAgent(env.start, initial_performance)
-    agent_ids = SatelliteAgent(env.start, initial_performance)
-
-    # Agent programs
-    UCS_program = BestFirstSearchAgentProgram()
-    IDS_program = IDSearchAgentProgram()
-
-    # Run search
-    node_ucs = UCS_program(problem)
-    node_ids = IDS_program(problem)
-
-    # Reconstruct paths
-    path_ucs = []
-    n = node_ucs
-    while n:
-        path_ucs.append(n.state)
-        n = n.parent
-    path_ucs.reverse()
-
-    path_ids = []
-    n = node_ids
-    while n:
-        path_ids.append(n.state)
-        n = n.parent
-    path_ids.reverse()
-
-    # Simulate
-    simulate(agent_ucs, env, path_ucs)
-    simulate(agent_ids, env, path_ids)
-
-    print("\n--- RESULTS ---")
-    print(f"UCS Path Length: {len(path_ucs)} | Performance: {agent_ucs.performance:.2f} | Alive: {agent_ucs.alive}")
-    print(f"IDS Path Length: {len(path_ids)} | Performance: {agent_ids.performance:.2f} | Alive: {agent_ids.alive}")
-
-    env.visualize(path_ucs, title="Uniform Cost Search Path")
-    env.visualize(path_ids, title="Iterative Deepening Search Path")
-
-if __name__ == "__main__":
-    main()
+    depth = 0
+    while True:
+        result = depth_limited_search(Node(problem.initial), depth)
+        if result is not None:
+            return result  # ✅ Return goal node (for path + cost tracking)
+        depth += 1
