@@ -63,3 +63,4 @@ class AsteroidEnvironment:
 
     def is_free(self, r, c):
         return (0 <= r < self.rows) and (0 <= c < self.cols) and self.grid[r, c] != 1
+
